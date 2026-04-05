@@ -1,0 +1,64 @@
+name: Build GLS Parser
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller openpyxl PyQt5
+
+      - name: Build Mac .app
+        run: |
+          pyinstaller --noconfirm --windowed --onefile \
+            --name "GLS Parser" \
+            gls_parser.py
+
+      - name: Zip Mac app
+        run: |
+          cd dist
+          zip -r "GLS_Parser_Mac.zip" "GLS Parser"
+
+      - name: Upload Mac artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GLS_Parser_Mac
+          path: dist/GLS_Parser_Mac.zip
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller openpyxl PyQt5
+
+      - name: Build Windows .exe
+        run: |
+          pyinstaller --noconfirm --windowed --onefile `
+            --name "GLS_Parser" `
+            gls_parser.py
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GLS_Parser_Windows
+          path: dist/GLS_Parser.exe
