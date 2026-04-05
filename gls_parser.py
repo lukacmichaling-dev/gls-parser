@@ -21,7 +21,7 @@ warnings.filterwarnings('ignore')
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFileDialog, QSpinBox,
-    QGroupBox, QTextEdit, QMessageBox, QProgressBar,
+    QGroupBox, QMessageBox, QProgressBar,
     QTableWidget, QTableWidgetItem, QHeaderView, QSplitter, QFrame
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
@@ -472,7 +472,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('GLS Parser – MoneyData konverzia')
-        self.setMinimumSize(1100, 750)
+        self.setMinimumSize(1500, 750)
         self._build_ui()
 
     # ── Zostav UI ─────────────────────────────────────────────────────────────
@@ -492,7 +492,24 @@ class MainWindow(QMainWindow):
         # Riadok 1: XML + XLSX
         row1 = QHBoxLayout()
 
-        grp_xml = QGroupBox('XML bankový výpis')
+        GRP_STYLE = """
+            QGroupBox {
+                font-weight: bold;
+                color: #5ab4ff;
+                border: 1px solid #2a4a6a;
+                border-radius: 5px;
+                margin-top: 8px;
+                padding-top: 4px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 4px;
+            }
+        """
+
+        grp_xml = QGroupBox('📄  XML bankový výpis')
+        grp_xml.setStyleSheet(GRP_STYLE)
         l_xml = QHBoxLayout(grp_xml)
         self.xml_edit = QLineEdit()
         self.xml_edit.setPlaceholderText('Vyber CAMT.053 XML súbor...')
@@ -502,7 +519,8 @@ class MainWindow(QMainWindow):
         l_xml.addWidget(self.xml_edit)
         l_xml.addWidget(btn_xml)
 
-        grp_xlsx = QGroupBox('Priečinok GLS XLSX')
+        grp_xlsx = QGroupBox('📊  Priečinok GLS XLSX')
+        grp_xlsx.setStyleSheet(GRP_STYLE)
         l_xlsx = QHBoxLayout(grp_xlsx)
         self.xlsx_edit = QLineEdit()
         self.xlsx_edit.setPlaceholderText('Priečinok s XLSX súbormi...')
@@ -516,10 +534,11 @@ class MainWindow(QMainWindow):
         row1.addWidget(grp_xlsx, 2)
         form_layout.addLayout(row1)
 
-        # Riadok 2: Nastavenia + Výstup + Tlačidlo
+        # Riadok 2: Nastavenia + Výstup + Tlačidlá
         row2 = QHBoxLayout()
 
-        grp_set = QGroupBox('Nastavenia')
+        grp_set = QGroupBox('⚙️  Nastavenia')
+        grp_set.setStyleSheet(GRP_STYLE)
         l_set = QHBoxLayout(grp_set)
         l_set.addWidget(QLabel('DCislo štart:'))
         self.dcislo_spin = QSpinBox()
@@ -538,7 +557,8 @@ class MainWindow(QMainWindow):
         l_set.addWidget(self.hosp_do_edit)
         l_set.addStretch()
 
-        grp_out = QGroupBox('Výstupný súbor')
+        grp_out = QGroupBox('💾  Výstupný súbor')
+        grp_out.setStyleSheet(GRP_STYLE)
         l_out = QHBoxLayout(grp_out)
         self.out_edit = QLineEdit()
         self.out_edit.setPlaceholderText('Cesta k výstupnému XML...')
@@ -548,15 +568,33 @@ class MainWindow(QMainWindow):
         l_out.addWidget(self.out_edit)
         l_out.addWidget(btn_out)
 
-        self.btn_run = QPushButton('▶  Spustiť konverziu')
-        self.btn_run.setFixedHeight(48)
-        self.btn_run.setFixedWidth(160)
+        # Tlačidlá Spustiť + Reset
+        btn_col = QVBoxLayout()
+        self.btn_run = QPushButton('▶  Spustiť')
+        self.btn_run.setFixedHeight(36)
+        self.btn_run.setFixedWidth(140)
         f = QFont(); f.setBold(True); self.btn_run.setFont(f)
+        self.btn_run.setStyleSheet(
+            'QPushButton { background: #1a5c9a; color: white; border-radius: 4px; }'
+            'QPushButton:hover { background: #2272be; }'
+            'QPushButton:disabled { background: #333; color: #666; }'
+        )
         self.btn_run.clicked.connect(self._run)
+
+        self.btn_reset = QPushButton('↺  Reset')
+        self.btn_reset.setFixedHeight(36)
+        self.btn_reset.setFixedWidth(140)
+        self.btn_reset.setStyleSheet(
+            'QPushButton { background: #4a2a2a; color: #ffaaaa; border-radius: 4px; }'
+            'QPushButton:hover { background: #6a3a3a; }'
+        )
+        self.btn_reset.clicked.connect(self._reset)
+        btn_col.addWidget(self.btn_run)
+        btn_col.addWidget(self.btn_reset)
 
         row2.addWidget(grp_set, 2)
         row2.addWidget(grp_out, 3)
-        row2.addWidget(self.btn_run)
+        row2.addLayout(btn_col)
         form_layout.addLayout(row2)
 
         root_layout.addWidget(form_widget)
@@ -580,7 +618,7 @@ class MainWindow(QMainWindow):
         )
         self.tbl_orig, self.lbl_total_orig = left_panel[0], left_panel[1]
 
-        # Pravý panel – upravený MoneyData
+        # Stredný panel – upravený MoneyData
         right_panel = self._make_panel(
             'Upravený XML (MoneyData)',
             ['Dátum', 'Doklad', 'Vydej', 'VS', 'Zákazník', 'Suma (EUR)'],
@@ -588,21 +626,16 @@ class MainWindow(QMainWindow):
         )
         self.tbl_out, self.lbl_total_out = right_panel[0], right_panel[1]
 
-        splitter.addWidget(left_panel[2])    # wrapper widget
+        # Pravý panel – vzorový MoneyData (len na čítanie / porovnanie)
+        ref_panel = self._make_ref_panel()
+        self.tbl_ref, self.lbl_total_ref, self.ref_xml_path = ref_panel[0], ref_panel[1], ref_panel[2]
+
+        splitter.addWidget(left_panel[2])
         splitter.addWidget(right_panel[2])
-        splitter.setSizes([550, 550])
+        splitter.addWidget(ref_panel[3])
+        splitter.setSizes([500, 500, 500])
 
         root_layout.addWidget(splitter, 1)
-
-        # ── Log ───────────────────────────────────────────────────────────────
-        grp_log = QGroupBox('Priebeh')
-        grp_log.setMaximumHeight(110)
-        l_log = QVBoxLayout(grp_log)
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setFont(QFont('Courier New', 9))
-        l_log.addWidget(self.log_text)
-        root_layout.addWidget(grp_log)
 
     def _make_panel(self, title: str, headers: list, widths: list):
         """Vytvorí panel s nadpisom, tabuľkou a celkovou sumou."""
@@ -648,6 +681,66 @@ class MainWindow(QMainWindow):
 
         return tbl, lbl_total, wrapper
 
+    def _make_ref_panel(self):
+        """Vytvorí panel pre vzorový MoneyData XML s tlačidlom na načítanie."""
+        wrapper = QWidget()
+        layout  = QVBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(3)
+
+        # Hlavička s nadpisom a tlačidlom
+        header = QWidget()
+        header.setStyleSheet(
+            'background: #12122a; border: 1px solid #333350; border-bottom: none;')
+        h_row = QHBoxLayout(header)
+        h_row.setContentsMargins(6, 4, 6, 4)
+        lbl_title = QLabel('Vzorový XML (porovnanie)')
+        f = QFont(); f.setBold(True); f.setPointSize(10)
+        lbl_title.setFont(f)
+        lbl_title.setStyleSheet('color: #a0a0cc; background: transparent; border: none;')
+        lbl_title.setAlignment(Qt.AlignCenter)
+
+        btn_load = QPushButton('Načítať vzorový XML')
+        btn_load.setFixedHeight(26)
+        btn_load.setStyleSheet(
+            'QPushButton { background: #1a3a5a; color: #80c8ff; border-radius: 3px; '
+            'border: 1px solid #2a5a8a; padding: 0 8px; font-size: 9pt; }'
+            'QPushButton:hover { background: #2a5a8a; }'
+        )
+        btn_load.clicked.connect(self._pick_ref_xml)
+
+        h_row.addWidget(lbl_title, 1)
+        h_row.addWidget(btn_load)
+        layout.addWidget(header)
+
+        # Tabuľka
+        tbl = QTableWidget(0, 5)
+        tbl.setHorizontalHeaderLabels(['Dátum', 'Doklad', 'VS', 'Zákazník', 'Suma (EUR)'])
+        tbl.horizontalHeader().setStretchLastSection(True)
+        tbl.verticalHeader().setDefaultSectionSize(22)
+        tbl.verticalHeader().setVisible(False)
+        tbl.setSelectionBehavior(tbl.SelectRows)
+        tbl.setEditTriggers(tbl.NoEditTriggers)
+        tbl.setAlternatingRowColors(False)
+        tbl.setStyleSheet(TBL_STYLE)
+        tbl.setFont(QFont('Menlo', 9))
+        for i, w in enumerate([90, 95, 115, 200, 100]):
+            tbl.setColumnWidth(i, w)
+        layout.addWidget(tbl, 1)
+
+        # Celková suma
+        lbl_total = QLabel('Celková suma: –')
+        lbl_total.setAlignment(Qt.AlignRight)
+        f2 = QFont(); f2.setBold(True); f2.setPointSize(9)
+        lbl_total.setFont(f2)
+        lbl_total.setStyleSheet(
+            'padding: 5px 8px; background: #12122a; color: #a0c8ff;'
+            'border: 1px solid #333350; border-top: none;')
+        layout.addWidget(lbl_total)
+
+        ref_path = [None]   # mutable container pre cestu k súboru
+        return tbl, lbl_total, ref_path, wrapper
+
     # ── Výber súborov ─────────────────────────────────────────────────────────
     def _pick_xml(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -672,12 +765,89 @@ class MainWindow(QMainWindow):
         if path:
             self.out_edit.setText(path)
 
+    def _pick_ref_xml(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, 'Vyber vzorový MoneyData XML súbor', '', 'XML súbory (*.xml)')
+        if path:
+            self.ref_xml_path[0] = path
+            self._load_ref_preview(path)
+
+    def _load_ref_preview(self, xml_path: str):
+        try:
+            tree = ET.parse(xml_path)
+            root = tree.getroot()
+        except Exception as e:
+            QMessageBox.warning(self, 'Chyba', f'Chyba pri načítaní XML: {e}')
+            return
+
+        tbl = self.tbl_ref
+        tbl.setRowCount(0)
+        prijem_sum = 0.0
+        vydaj_sum  = 0.0
+        count      = 0
+
+        for dokl in root.findall('.//BankDokl'):
+            dat   = dokl.findtext('DatUcPr', '')
+            dokal = dokl.findtext('Doklad', '')
+            vs    = dokl.findtext('VarSym', '')
+            celk  = dokl.findtext('Celkem', '0')
+            vydej = dokl.findtext('Vydej', '0')
+            nm_el = dokl.find('.//Adresa/ObchNazev')
+            name  = nm_el.text.strip() if nm_el is not None and nm_el.text else ''
+
+            row_idx = tbl.rowCount()
+            tbl.insertRow(row_idx)
+            is_vydaj = (vydej == '1')
+            bg = BG_DBIT if is_vydaj else (BG_ROW_ODD if row_idx % 2 else BG_ROW_EVEN)
+            fg_sum = FG_DBIT if is_vydaj else FG_DEFAULT
+            vs_fg  = FG_DIM if not vs or vs == '0000000000' else FG_DEFAULT
+
+            tbl.setItem(row_idx, 0, _tbl_item(dat,   Qt.AlignCenter, bg=bg))
+            tbl.setItem(row_idx, 1, _tbl_item(dokal,                  bg=bg))
+            tbl.setItem(row_idx, 2, _tbl_item(vs,                     fg=vs_fg, bg=bg))
+            tbl.setItem(row_idx, 3, _tbl_item(name,                   bg=bg))
+            tbl.setItem(row_idx, 4, _tbl_item(celk,  Qt.AlignRight,   fg=fg_sum, bg=bg))
+
+            try:
+                val = float(celk)
+            except ValueError:
+                val = 0.0
+            if is_vydaj:
+                vydaj_sum  += val
+            else:
+                prijem_sum += val
+            count += 1
+
+        net = prijem_sum - vydaj_sum
+        self.lbl_total_ref.setText(
+            f'Príjmy: {prijem_sum:,.2f} €   |   Výdaje: {vydaj_sum:,.2f} €   |   '
+            f'Rozdiel: {net:,.2f} €   |   Záznamy: {count}'
+        )
+
+    # ── Reset ─────────────────────────────────────────────────────────────────
+    def _reset(self):
+        self.xml_edit.clear()
+        self.xlsx_edit.clear()
+        self.out_edit.clear()
+        self.dcislo_spin.setValue(1)
+        self.hosp_od_edit.setText(f'{datetime.now().year}-01-01')
+        self.hosp_do_edit.setText(f'{datetime.now().year}-12-31')
+        self.tbl_orig.setRowCount(0)
+        self.tbl_out.setRowCount(0)
+        self.tbl_ref.setRowCount(0)
+        self.lbl_total_orig.setText('Celková suma: –')
+        self.lbl_total_out.setText('Celková suma: –')
+        self.lbl_total_ref.setText('Celková suma: –')
+        self.ref_xml_path[0] = None
+        self.progress.setVisible(False)
+        self.btn_run.setEnabled(True)
+
     # ── Načítaj náhľad pôvodného XML ──────────────────────────────────────────
     def _load_original_preview(self, xml_path: str):
         try:
             rows = read_original_xml(xml_path)
         except Exception as e:
-            self.log_text.append(f'Chyba pri načítaní XML: {e}')
+            QMessageBox.warning(self, 'Chyba', f'Chyba pri načítaní XML: {e}')
             return
 
         tbl = self.tbl_orig
@@ -737,7 +907,6 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, 'Chyba vstupu', '\n'.join(errors))
             return
 
-        self.log_text.clear()
         self.tbl_out.setRowCount(0)
         self.lbl_total_out.setText('Celková suma: –')
         self.btn_run.setEnabled(False)
@@ -745,7 +914,6 @@ class MainWindow(QMainWindow):
 
         self._worker = WorkerThread(
             xml_path, xlsx_dir, dcislo, hosp_od, hosp_do, out_path)
-        self._worker.log_signal.connect(self.log_text.append)
         self._worker.done_signal.connect(self._on_done)
         self._worker.error_signal.connect(self._on_error)
         self._worker.start()
@@ -809,7 +977,6 @@ class MainWindow(QMainWindow):
     def _on_error(self, msg: str):
         self.progress.setVisible(False)
         self.btn_run.setEnabled(True)
-        self.log_text.append(f'\n❌ CHYBA:\n{msg}')
         QMessageBox.critical(self, 'Chyba', msg[:400])
 
 
