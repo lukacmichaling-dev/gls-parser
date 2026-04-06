@@ -17,8 +17,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install pyinstaller openpyxl PyQt5
+        run: pip install pyinstaller openpyxl PyQt5
 
       - name: Build Mac .app
         run: |
@@ -48,8 +47,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install pyinstaller openpyxl PyQt5
+        run: pip install pyinstaller openpyxl PyQt5
 
       - name: Build Windows .exe
         run: |
@@ -62,3 +60,48 @@ jobs:
         with:
           name: GLS_Parser_Windows
           path: dist/GLS_Parser.exe
+
+  release:
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Mac artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: GLS_Parser_Mac
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: GLS_Parser_Windows
+
+      - name: Delete existing latest release
+        run: |
+          gh release delete latest --repo ${{ github.repository }} --yes 2>/dev/null || true
+          git -c http.extraHeader="Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            ls-remote --tags origin | grep "refs/tags/latest" | \
+            xargs -I{} gh api -X DELETE /repos/${{ github.repository }}/git/{} 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "GLS Parser – najnovšia verzia"
+          body: |
+            ## Stiahnutie
+
+            | Platforma | Súbor |
+            |-----------|-------|
+            | 🍎 Mac    | `GLS_Parser_Mac.zip` – rozbaliť a spustiť .app |
+            | 🪟 Windows | `GLS_Parser.exe` – spustiť priamo |
+
+            ---
+            *Automaticky zostavené z posledného commitu.*
+          files: |
+            GLS_Parser_Mac.zip
+            GLS_Parser.exe
+          prerelease: false
