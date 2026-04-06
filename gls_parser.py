@@ -21,7 +21,7 @@ warnings.filterwarnings('ignore')
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFileDialog, QSpinBox,
-    QGroupBox, QMessageBox, QProgressBar,
+    QGroupBox, QMessageBox, QProgressBar, QCheckBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QSplitter, QFrame
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
@@ -589,8 +589,19 @@ class MainWindow(QMainWindow):
             'QPushButton:hover { background: #6a3a3a; }'
         )
         self.btn_reset.clicked.connect(self._reset)
+
+        self.chk_test = QCheckBox('Testovacia\nverzia')
+        self.chk_test.setStyleSheet(
+            'QCheckBox { color: #888899; font-size: 9pt; }'
+            'QCheckBox:checked { color: #ffcc44; }'
+            'QCheckBox::indicator { width: 14px; height: 14px; }'
+        )
+        self.chk_test.setChecked(False)
+        self.chk_test.toggled.connect(self._toggle_ref_panel)
+
         btn_col.addWidget(self.btn_run)
         btn_col.addWidget(self.btn_reset)
+        btn_col.addWidget(self.chk_test)
 
         row2.addWidget(grp_set, 2)
         row2.addWidget(grp_out, 3)
@@ -630,10 +641,14 @@ class MainWindow(QMainWindow):
         ref_panel = self._make_ref_panel()
         self.tbl_ref, self.lbl_total_ref, self.ref_xml_path = ref_panel[0], ref_panel[1], ref_panel[2]
 
+        self._ref_widget = ref_panel[3]
+        self._splitter   = splitter
+
         splitter.addWidget(left_panel[2])
         splitter.addWidget(right_panel[2])
-        splitter.addWidget(ref_panel[3])
+        splitter.addWidget(self._ref_widget)
         splitter.setSizes([500, 500, 500])
+        self._ref_widget.setVisible(False)
 
         root_layout.addWidget(splitter, 1)
 
@@ -764,6 +779,15 @@ class MainWindow(QMainWindow):
             self, 'Ulož výstupný XML súbor', '', 'XML súbory (*.xml)')
         if path:
             self.out_edit.setText(path)
+
+    def _toggle_ref_panel(self, checked: bool):
+        self._ref_widget.setVisible(checked)
+        if checked:
+            total = self._splitter.width()
+            self._splitter.setSizes([total // 3, total // 3, total // 3])
+        else:
+            total = self._splitter.width()
+            self._splitter.setSizes([total // 2, total // 2, 0])
 
     def _pick_ref_xml(self):
         path, _ = QFileDialog.getOpenFileName(
