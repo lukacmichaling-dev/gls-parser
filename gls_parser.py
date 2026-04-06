@@ -427,6 +427,10 @@ FG_DEFAULT   = QColor('#e0e0f0')   # svetlé písmo
 FG_DIM       = QColor('#888899')   # tlmené (prázdne VS)
 FG_GLS       = QColor('#ff80c0')   # ružová – GLS zhoda
 FG_DBIT      = QColor('#ffb347')   # oranžová – výdaj
+BG_MATCH     = QColor('#1a2e1a')   # tmavo-zelená – zhoda s referenciou
+BG_MISMATCH  = QColor('#2e1a1a')   # tmavo-červená – rozdiel oproti referenci
+FG_MATCH     = QColor('#66cc66')   # zelená – zhodná bunka
+FG_MISMATCH  = QColor('#ff5555')   # červená – odlišná bunka
 
 TBL_STYLE = """
 QTableWidget {
@@ -847,6 +851,8 @@ class MainWindow(QMainWindow):
             f'Príjmy: {prijem_sum:,.2f} €   |   Výdaje: {vydaj_sum:,.2f} €   |   '
             f'Rozdiel: {net:,.2f} €   |   Záznamy: {count}'
         )
+        if self.chk_test.isChecked() and self.tbl_out.rowCount() > 0:
+            self._compare_panels()
 
     # ── Reset ─────────────────────────────────────────────────────────────────
     def _reset(self):
@@ -946,6 +952,8 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(False)
         self.btn_run.setEnabled(True)
         self._fill_output_table(out_rows)
+        if self.chk_test.isChecked() and self.tbl_ref.rowCount() > 0:
+            self._compare_panels()
         QMessageBox.information(
             self, 'Hotovo',
             f'Konverzia dokončená.\nSpracovaných záznamov: {count}')
@@ -996,6 +1004,79 @@ class MainWindow(QMainWindow):
         self.lbl_total_out.setText(
             f'Príjmy: {prijem_sum:,.2f} €   |   Výdaje: {vydaj_sum:,.2f} €   |   '
             f'Rozdiel: {net:,.2f} €   |   Záznamy: {len(rows)}'
+        )
+
+    def _compare_panels(self):
+        """Porovná stredný panel (výstup parsera) s pravým panelom (referencia).
+        Zelenou označí zhodné riadky, červenou odlišné. Odlišné bunky svietia jasnejšie."""
+        tbl_out = self.tbl_out
+        tbl_ref = self.tbl_ref
+
+        # Zostroj slovník z ref panela: Doklad → {datum, vs, zakaznik, suma}
+        # tbl_ref stĺpce: 0=Dátum, 1=Doklad, 2=VS, 3=Zákazník, 4=Suma
+        ref_map = {}
+        for r in range(tbl_ref.rowCount()):
+            doklad = tbl_ref.item(r, 1).text() if tbl_ref.item(r, 1) else ''
+            ref_map[doklad] = {
+                'datum':    tbl_ref.item(r, 0).text() if tbl_ref.item(r, 0) else '',
+                'vs':       tbl_ref.item(r, 2).text() if tbl_ref.item(r, 2) else '',
+                'zakaznik': tbl_ref.item(r, 3).text() if tbl_ref.item(r, 3) else '',
+                'suma':     tbl_ref.item(r, 4).text() if tbl_ref.item(r, 4) else '',
+            }
+
+        # tbl_out stĺpce: 0=Dátum, 1=Doklad, 2=Vydej, 3=VS, 4=Zákazník, 5=Suma
+        match_count    = 0
+        mismatch_count = 0
+        missing_count  = 0
+
+        for r in range(tbl_out.rowCount()):
+            doklad = tbl_out.item(r, 1).text() if tbl_out.item(r, 1) else ''
+            if doklad not in ref_map:
+                # Doklad sa v referencii nenachádza – oranžová
+                missing_count += 1
+                for c in range(tbl_out.columnCount()):
+                    item = tbl_out.item(r, c)
+                    if item:
+                        item.setBackground(BG_DBIT)
+                        item.setForeground(FG_DBIT)
+                continue
+
+            ref = ref_map[doklad]
+            out_vals = {
+                'datum':    tbl_out.item(r, 0).text() if tbl_out.item(r, 0) else '',
+                'vs':       tbl_out.item(r, 3).text() if tbl_out.item(r, 3) else '',
+                'zakaznik': tbl_out.item(r, 4).text() if tbl_out.item(r, 4) else '',
+                'suma':     tbl_out.item(r, 5).text() if tbl_out.item(r, 5) else '',
+            }
+            # Porovnaj len VS a sumu (zákazník môže byť prázdny v parseri – Money S3 doplní)
+            col_map = {'vs': 3, 'suma': 5, 'datum': 0}
+            diffs = {k for k in ('vs', 'suma', 'datum') if out_vals[k] != ref[k]}
+
+            if not diffs:
+                match_count += 1
+                for c in range(tbl_out.columnCount()):
+                    item = tbl_out.item(r, c)
+                    if item:
+                        item.setBackground(BG_MATCH)
+                        item.setForeground(FG_MATCH)
+            else:
+                mismatch_count += 1
+                for c in range(tbl_out.columnCount()):
+                    item = tbl_out.item(r, c)
+                    if item:
+                        item.setBackground(BG_MISMATCH)
+                        # Odlišná bunka – jasná červená, ostatné – tlmená
+                        if c in {col_map[k] for k in diffs}:
+                            item.setForeground(FG_MISMATCH)
+                        else:
+                            item.setForeground(QColor('#cc8888'))
+
+        total = tbl_out.rowCount()
+        self.lbl_total_out.setText(
+            f'Zhoda: {match_count}/{total}   |   '
+            f'Rozdiel: {mismatch_count}   |   '
+            f'Chýba v ref.: {missing_count}   |   '
+            f'Záznamy: {total}'
         )
 
     def _on_error(self, msg: str):
